@@ -21,11 +21,11 @@ Processing.confifure(buyerId: `buyerId`)
 ```
 
 ### Авторизация пользователя в системе KD Pay
-Авторизация пользователя проходит в два этапа, для этого необходимо запросить у пользователя номер телефона (обязательное поле) и имя (необязательное). После чего указанные данные передаются в метод `login(phone, name)`. Сервер в ответ на запрос посылает на номер пользователя шестизначный код, который вместе с `fcm` токеном нужно передать в метод `confirmCode(code, fcmToken)`. При успешном ответе от сервера sdk сохраняет в кеше необходимые данные (публичный ключ сервера, идентификаторы сессии и пользователя). После чего пользователь считается авторизованным 
+Авторизация пользователя проходит в два этапа, для этого необходимо запросить у пользователя номер телефона (обязательное поле, на этот номер будет создан кошелёк), дополнительный номер телефона (необязательное), имя (необязательное), идентификатор устройства (если не передать, СДК попытается подставить автоматически) и идентификатор карты лояльности (необязательный). После чего указанные данные передаются в метод login(phone, basePhone, name, uid, loyaltyId). Сервер в ответ на запрос посылает на номер пользователя шестизначный код, который вместе с fcm токеном нужно передать в метод confirmCode(code, fcmToken). При успешном ответе от сервера sdk сохраняет в кеше необходимые данные (публичный ключ сервера, идентификаторы сессии и пользователя). После чего пользователь считается авторизованным 
 
 ```
-func login(phone: String, name: String?, uid: String?, completion: ((Result<Int>) -> Void)? = nil) {  
-    Processing.login(userPhone: phone, userName: name, uid: uid, completion: completion)
+func login(phone: String, name: String?, uid: String?, loyaltyId: String?, completion: ((Result<Int>) -> Void)? = nil) {  
+    Processing.login(userPhone: phone, userName: name, uid: uid, loyaltyId: String?, completion: completion)
 }
  
 fun confirm(smsCode: String, fcmToken: String, completion: ((Result<Void>) -> Void)? = nil) {  
@@ -236,12 +236,22 @@ fun sendFormCommit(type: String, formId: Int, version: Int?, draftFields: [Int: 
 | UserInfo      | Нет       | Возвращает userId пользователя, если такой имеется |
 
 
-##### Проверка доступа к кошелькам.
-`getUserExperiment(phone: String, completion: @escaping (Result<ProcessingUserExperiments>) -> Void)`
+##### Проверка доступа к кошелькам. Имеет кеширование. Возвращает результат предыдущего запроса, параллельно выполняя новый запрос. Если интервал не задан, кеш считается валидным 1 час.
+`getUserExperiment(phone: String, applicationVersion: String, deviceId: String?, loyaltyId: String, cacheInterval: TimeInterval?, completion: @escaping (Result<[ProcessingUserExperiments]>) -> Void)`
+**Параметры**
+
+| Имя      | Тип | Опциональный |Описание|
+| ----------- | ----------- | ----------- |--------|
+| phone| String| нет | Телефон указанный пользователем |
+| applicationVersion| String| нет | Версия приложения |
+| deviceId| String| да | Идентификатор пользователя в системе. Если не указан используется 64-битное число (выраженное в виде шестнадцатеричной строки), уникальное для каждой комбинации ключа подписи приложения, пользователя и устройства. |
+| loyaltyId| String| нет | номер карты лояльности |
+| cacheInterval| TimeInterval| да | Интервал проверки кэша в секундах. Если не выставлен интервал, то кеш на 1 час. |
+
 **Возвращает**
 | Тип      | Опциональный | Описание |
 | ----------- | ----------- | ----------- |
-| UserExperiments      | Нет       | Вернет значение разрешены кошельки или нет для данного пользователя в зависимости от параметра BASE_FLOW|
+| ProcessingUserExperiments      | Нет       | Вернет список экспериментов с доступностью для данного пользователя|
 
 ##### Проверяет авторизован ли пользователь в системе по таким признакам как наличие в кеше идентификатора сессии и пользователя. А так же наличию публичного ключа сервера.
 `isAuthorized: Boolean`
@@ -253,7 +263,7 @@ fun sendFormCommit(type: String, formId: Int, version: Int?, draftFields: [Int: 
 
 
 ##### Первый шаг авторизации пользователя в системе KD Pay. Служит для запроса смс кода на указанный в параметрах модуль.
-`login(userPhone: String, userName: String? = nil, uid: String?, completion: ((Result<Int>) -> Void)? = nil)`
+`login(userPhone: String, userName: String? = nil, uid: String?, loyaltyId: String?, completion: ((Result<Int>) -> Void)? = nil)`
 **Параметры**
 
 | Имя      | Тип | Опциональный |Описание|
@@ -261,6 +271,7 @@ fun sendFormCommit(type: String, formId: Int, version: Int?, draftFields: [Int: 
 | userPhone| String| нет | Телефон указанный пользователем |
 | userName| String| да | Имя пользователя |
 | uid| String| да | Идентификатор пользователя в системе.  Если не указан используется 64-битное число (выраженное в виде шестнадцатеричной строки), уникальное для каждой комбинации ключа подписи приложения, пользователя и устройства.  |
+| loyaltyId| String| да | номер карты лояльности |
 
 **Возвращает**
 | Тип      | Опциональный | Описание |
@@ -656,13 +667,12 @@ fun sendFormCommit(type: String, formId: Int, version: Int?, draftFields: [Int: 
 | error | В форме имеются поля, не прошедшие валидацию |
 | ok | Все поля в черновике валидны |
 
-
-
 #### `ProcessingUserExperiments` enum
 | Имя свойства |Описание|
 | ----------- |--------|
-| normal | Кошельки доступны |
-| notAvailable(hasQrCodes: Bool) | Кошельки недоступны |
+| baseFlow(isAvailable: Bool) | Доступность кошельков |
+| smallQR(isAvailable: Bool) | Доступность QR с малым размером |
+| bonusChange(isAvailable: Bool) | Доступность переводов бонусов |
 
 #### sealed `UserInfo` enum
 | Имя свойства |Описание|
