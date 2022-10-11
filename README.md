@@ -196,7 +196,6 @@ fun sendFormDraft(type: String, formId: Int?, version: Int?, draftFields: [Int: 
 }
 ```
 
-
 ### Отправка формы на проверку
 Для валидации полей используется метод `sendFormCommit(type: String, formId: Int, version: Int?, draftFields: [Int: String], completion: @escaping (Result<ProcessingFormDraft>) -> Void)`. Первый запрос на `commit` может происходить без `formId` и `version`. Актуальные значения `formId` и `version` вернутся при первом и последующем `commit`. Отправлять необходимо все поля.
 
@@ -214,10 +213,6 @@ fun sendFormCommit(type: String, formId: Int, version: Int?, draftFields: [Int: 
     }
 }
 ```
-
-
-
-
 
 # Методы
 
@@ -400,6 +395,13 @@ fun sendFormCommit(type: String, formId: Int, version: Int?, draftFields: [Int: 
 | ----------- | ----------- | ----------- |--------|
 | amount| Int| нет | Количество запрашиваемых otp кодов. |
 
+##### Запрашивает один свободный OTP код. Код не помечается как использованный и выдан этим методом снова до использования
+`getUnusedOtpCode()`
+**Исключения**
+| Тип      |  Описание |
+| ----------- |  ----------- |
+| ErrorMessage.Client.NoOtpCode() | свободных кодов нет. Перед запросом можно проверить на наличие вызвав `haveOtpCode()` |
+
 ##### Метод получения формы упрощенной идентификации
 `getForm(type: String, formId: Int?, formStatus: ProcessingFormStatus?, completion: @escaping (Result<ProcessingForm>) -> Void)`
 **Параметры**
@@ -449,7 +451,7 @@ fun sendFormCommit(type: String, formId: Int, version: Int?, draftFields: [Int: 
 | ----------- | ----------- | ----------- |
 | ProcessingFormDraft | Нет| Актуальная информация формы и список невалидных полей |
 
-##### Метод проверки версии бибоиотеки
+##### Метод проверки версии библиотеки. Имеет кеширование. Возвращает результат предыдущего запроса, параллельно выполняя новый запрос.
 `checkLibraryVersion(cacheInterval: TimeInterval, completion: @escaping (Result<ProcessingVersionInfo>) -> Void)`
 **Параметры**
 
@@ -462,10 +464,55 @@ fun sendFormCommit(type: String, formId: Int, version: Int?, draftFields: [Int: 
 | ----------- | ----------- | ----------- |
 | ProcessingVersionInfo | нет| Возвращает результат проверки.  |
 
+##### Уведомляет сервер о показанных оповещениях ползьзователю. Возвращает список id оповений с актуальным статусом
+`notifySnacksShown(shownSnacks: Map<Int, Long>): List<SnacksShownStatus>`
+**Параметры**
+| Имя      | Тип | Опциональный |Описание|
+| ----------- | ----------- | ----------- |--------|
+| shownSnacks| Map<Int, Long> | нет | id и timestamp показанного оповещения |
+**Возвращает**
+| Тип      | Опциональный | Описание |
+| ----------- | ----------- | ----------- |
+| SnacksShownStatus | нет| Список id оповений с актуальным статусом |
 
-##### Полная очистка кеша sdk. Удаляются идентификаторы сессии, пользователя, публичный ключ сервера, отп коды и номер телефона пользователя.
+#### Получение списка операций для пользователя. Возвращает курсор на предыдущий/следующий набор операций, если такие имеются.
+`getOperations(cursor: String? = null,
+        type: OperationElement.OperationType? = null,
+        partner: String? = null,
+        datetimeStart: String? = null,
+        datetimeFinish: String? = null,
+        status: OperationElement.Status? = null
+    ): Operations`
+ **Параметры**
+ | Имя      | Тип | Опциональный |Описание|
+| ----------- | ----------- | ----------- |--------|
+| cursor | String | да | указатель на получение списка операций |
+| type | OperationElement.OperationType | да | тип операции |
+| partner | String | да | фильтр партнера |
+| datetimeStart | String | да | дата начала фильтрации операции |
+| datetimeFinish | String | да | дата конца фильтрации операции |
+| status | OperationElement.Status | да | статус операции |
+
+**Возвращает**
+| Тип      | Опциональный | Описание |
+| ----------- | ----------- | ----------- |
+| Operations | нет| Список операций с предыдущим/следующим указателем |
+
+#### Получение операции для пользователя
+`getOperation(id: Int, type: OperationElement.OperationType): OperationElement`
+ **Параметры**
+ | Имя      | Тип | Опциональный |Описание|
+| ----------- | ----------- | ----------- |--------|
+| id | String | нет | идентификатор операции |
+| type | OperationElement.OperationType | нет | тип операции |
+
+**Возвращает**
+| Тип      | Опциональный | Описание |
+| ----------- | ----------- | ----------- |
+| OperationElement | нет| Элемент операции |
+
+##### Полная очистка кеша sdk. Удаляются идентификаторы сессии, пользователя, публичный ключ сервера, otp коды и номер телефона пользователя. Параллельно на сервер отправляется запрос на сброс всех активных сессий.
 `logout()`
-
 
 # Структура данных
 
@@ -706,3 +753,88 @@ fun sendFormCommit(type: String, formId: Int, version: Int?, draftFields: [Int: 
 | value | String | нет | Актаульная версия (вида 1.0.0) |
 | storeLink | String | да | Ссылка на мп в сторе|
 | description | String | нет | Описание актуальной версии |
+
+#### `SnacksShownStatus`
+| Имя свойства | Тип | Опциональный |Описание|
+| ----------- | ----------- | ----------- |--------|
+| id | Int | нет | Идентификатор сообщения  |
+| status | String | нет | Статус сообщения  |
+
+#### `Operations`
+| Имя свойства | Тип | Опциональный |Описание|
+| ----------- | ----------- | ----------- |--------|
+| operations | List<OperationElement> | нет | Список элементов операции|
+| nextCursor | String | да | Указатель на следующий список операций |
+| prevCursor | String | да | Указатель на предыдущий список операций |
+
+#### `OperationElement`
+| Имя свойства | Тип | Опциональный |Описание|
+| ----------- | ----------- | ----------- |--------|
+| id | Int | нет | Идентификатор операции |
+| timestamp | Long | нет | Дата и время операции |
+| type | OperationsElement.OperationType | нет | Тип операции |
+| status | OperationsElement.Status | нет | Статус операции |
+| name | String | нет | Название операции – русский аналог type |
+| imageUrl | String | нет | Изображение операции |
+| merchant | String | нет | Торговец операции |
+| from | FromAndToElement | нет | Откуда произведена операция |
+| to | FromAndToElement | нет | Куда произведена операция |
+| amount | String | нет | Сумма операции |
+| currency | CurrencyElement | нет | Валюта операции |
+| childOperations | List<OperationItem> | нет | Информация о дочерних операциях |
+| parentOperations | List<OperationItem> | нет | Информация о родительских операциях |
+| bill  | String | да | законопроект |
+| externalLink  | String | да | внешняя ссылка |
+| moneyFlowDirection  | OperationElement.MoneyFlowDirection | нет | поступают деньги или уходят со счета пользователя |
+| additionalImageId  | String | да | Дополнительное изображение операции (например значок СБП) |
+| cancelDescription  | String | да | писание причины отмены |
+
+#### `OperationElement.OperationType ` enum
+| Имя | Описание|
+| ----------- | ----------- |
+| Purchase | покупка  |
+| Invoice | me2me пополнение |
+| BankLink | пополнение для привязки |
+| Refill | пополнение инициированное пользователем из приложение его банка |
+| Refund | возврат |
+| Unknown | неизвестная операция, если не удалось распарсить ответ бека |
+
+#### `OperationElement.Status ` enum
+| Имя | Описание|
+| ----------- | ----------- |
+| Canceled | отменена  |
+| InProcess | в обработке |
+| Success | выполнена |
+| Unknown | неизвестный статус операции |
+
+#### `OperationElement.MoneyFlowDirection ` enum
+| Имя | Описание|
+| ----------- | ----------- |
+| Income | деньги поступают на счёт пользователя в монете - в приложении знак "+" |
+| Outcome | outcome - деньги уходят со счёта пользователя в монете |
+| Unknown | неизветсный статус |
+
+#### `OperationItem`
+| Имя свойства | Тип | Опциональный |Описание|
+| ----------- | ----------- | ----------- |--------|
+| id | Int | нет | Идентификатор операции |
+| type | OperationsElement.OperationType | нет | Тип операции |
+| name | String | нет | Имя операции |
+| imageUrl | String | нет | Изображение операции |
+| amount | String | нет | Сумма операции |
+| moneyFlowDirection  | OperationElement.MoneyFlowDirection | нет | поступают деньги или уходят со счета пользователя |
+| merchant | String | нет | Торговец операции |
+| currency | CurrencyElement | нет | Валюта операции |
+| additionalImageId  | String | да | Дополнительное изображение операции (например значок СБП) |
+
+#### `CurrencyElement`
+| Имя свойства | Тип | Опциональный |Описание|
+| ----------- | ----------- | ----------- |--------|
+| id | String | да | Идентификатор валюты |
+| symbol | String | да | Символ валюты |
+
+#### `FromAndToElement`
+| Имя свойства | Тип | Опциональный |Описание|
+| ----------- | ----------- | ----------- |--------|
+| name | String | нет | Торговец операции |
+| description | String | да | Описание торговца |
