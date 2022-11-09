@@ -1,4 +1,8 @@
 # Быстрый старт
+##### Вхождение в проект SPAR
+Ссылка: https://conf.siberian.pro/pages/viewpage.action?pageId=55574249
+##### Руководство по fastlane в SPAR (как сделать iOS build)
+Ссылка: https://conf.siberian.pro/pages/viewpage.action?pageId=77509566
 ##### Компиляция из исходников
 1. Откройте в Xcode файл Processing.xcodeproj 
 2. Внесите необходимые изменения.
@@ -21,11 +25,11 @@ Processing.confifure(buyerId: `buyerId`)
 ```
 
 ### Авторизация пользователя в системе KD Pay
-Авторизация пользователя проходит в два этапа, для этого необходимо запросить у пользователя номер телефона (обязательное поле, на этот номер будет создан кошелёк), дополнительный номер телефона (необязательное), имя (необязательное), идентификатор устройства (если не передать, СДК попытается подставить автоматически) и идентификатор карты лояльности (необязательный). После чего указанные данные передаются в метод login(phone, basePhone, name, uid, loyaltyId). Сервер в ответ на запрос посылает на номер пользователя шестизначный код, который вместе с fcm токеном нужно передать в метод confirmCode(code, fcmToken). При успешном ответе от сервера sdk сохраняет в кеше необходимые данные (публичный ключ сервера, идентификаторы сессии и пользователя). После чего пользователь считается авторизованным 
+Авторизация пользователя проходит в два этапа, для этого необходимо запросить у пользователя номер телефона (обязательное поле, на этот номер будет создан кошелёк), дополнительный номер телефона (необязательное), имя (необязательное), идентификатор устройства (если не передать, СДК попытается подставить автоматически) и идентификатор карты лояльности (необязательный). После чего указанные данные передаются в метод `login(phone, basePhone, name, deviceId, loyaltyId)`. Сервер в ответ на запрос посылает на номер пользователя шестизначный код, который вместе с `fcm` токеном нужно передать в метод `confirmCode(code, fcmToken)`. При успешном ответе от сервера sdk сохраняет в кеше необходимые данные (публичный ключ сервера, идентификаторы сессии и пользователя). После чего пользователь считается авторизованным
 
 ```
-func login(phone: String, name: String?, uid: String?, loyaltyId: String?, completion: ((Result<Int>) -> Void)? = nil) {  
-    Processing.login(userPhone: phone, userName: name, uid: uid, loyaltyId: String?, completion: completion)
+func login(phone: String, userBasePhone: String?, name: String?, deviceId: String?, loyaltyId: String?) {
+    Processing.login(userPhone: phone, userName: name, deviceId: deviceId, completion: completion)
 }
  
 fun confirm(smsCode: String, fcmToken: String, completion: ((Result<Void>) -> Void)? = nil) {  
@@ -34,7 +38,7 @@ fun confirm(smsCode: String, fcmToken: String, completion: ((Result<Void>) -> Vo
 ```
 
 ### Создание кошелька
-Для создания кошелька используется метод `createAccount()`. Для этого пользователь должен быть авторизован в системе KD Pay. Создание аккаунта занимает некоторое время и может быть дольше 30 секунд.
+Для создания кошелька используется метод `createAccount(referrerId: String? = null)`. Для этого пользователь должен быть авторизован в системе KD Pay. Создание аккаунта занимает некоторое время и может быть дольше 30 секунд.
 
 ### Получение аккаунта пользователя
 Получение аккаунта осуществляется с помощью метода `getAccount(cached: Bool, completion: @escaping (Result<WalletAccountResult>) -> Void)`. Для успешного получения состояния кошелька пользователь должен быть авторизован. Если клиент не авторизован в системе метод выбрасывает исключение. При отсутствии аккаунта в ответе поле `walletAccountState` будет иметь значение `none`.
@@ -158,17 +162,17 @@ fun generateQrString(loyaltyId: String) {
 
 ### Получение формы
 Для платежного сервиса в сценариях необходимы формы для получения информации о пользователе. Формы динамические, то есть содержимое (состав полей) меняется в зависимости от контекста (сценария). Например, для привязывания счета необходимо заполнить форму упрощенной идентификации.
-Получение формы происходит через метод `getForm(type: String, formId: Int?, formStatus: ProcessingFormStatus?, completion: @escaping (Result<ProcessingForm>) -> Void)`. Если запрос формы произойдет без `formId`, то сервер пришлет чистую форму.
-Если запрос происходит с `formId`, то SDK отправит 2 запроса на сервер:  `/form/fields` и `/request`. Первый запрос получит форму, второй получит статус валидации для полей. SDK соединит полученные результаты и вернет форму с провалидированными полями.
+Получение формы происходит через метод `getForm(type: String?, formId: Int?, version: Int?)`. Если запрос формы произойдет без `formId`, то сервер пришлет чистую форму.
+Если запрос происходит с `formId`, то SDK отправит 2 запроса на сервер:  `/form` и `/request`. Первый запрос получит форму, второй получит статус валидации для полей. SDK соединит полученные результаты и вернет форму с провалидированными полями.
 
 *Примечание: количество полей и их состав сервер может поменять на своей стороне, форма является динамической.*
 
 ```
-fun getFormFields(type: String, formId: Int?, formStatus: FormStatus) {
-    Processing.getFormFields(type: type, formId: formId, formStatus: formStatus) { result in 
+fun getForm(type: String?, formId: Int?, version: Int?) {
+    Processing.getForm(type: type, formId: formId, version: version) { result in 
         switch result {
-        case .success(let formFields): 
-            processSucess(formFields)
+        case .success(let forms): 
+            processSucess(forms)
         case .failure(let error):
             processError(error)
         }
@@ -196,6 +200,7 @@ fun sendFormDraft(type: String, formId: Int?, version: Int?, draftFields: [Int: 
 }
 ```
 
+
 ### Отправка формы на проверку
 Для валидации полей используется метод `sendFormCommit(type: String, formId: Int, version: Int?, draftFields: [Int: String], completion: @escaping (Result<ProcessingFormDraft>) -> Void)`. Первый запрос на `commit` может происходить без `formId` и `version`. Актуальные значения `formId` и `version` вернутся при первом и последующем `commit`. Отправлять необходимо все поля.
 
@@ -213,6 +218,60 @@ fun sendFormCommit(type: String, formId: Int, version: Int?, draftFields: [Int: 
     }
 }
 ```
+
+
+### Получение истории операции для пользователя
+Получить историю операций для пользователя можно с помощью метода `getOperations`. В данный метод заложены параметры для фильтрации операций. Бек вернет список операций, удовлетворяющих параметрам фильтрации.
+Для первого запроса истории операции не нужно передавать курсор, в последующих запросах необходимо передавать курсор. Бек вернет курсор в ответе на первый запрос, если пользователь имеет больше операций, чем бек может отдать за один запрос.
+Курсор (`cursor`) используется для пагинации операций.
+
+```
+func getOperations(cursor: String?, status: KDPayOperationElement.Status?, completion: @escaping (Result<KDPayOperations, KDPayError>) -> Void) {
+    Processing.getOperations(
+        cursor: cursor,
+        type: nil,
+        partner: nil,
+        datetimeStart: nil,
+        datetimeFinish: nil,
+        status: .init(rawValue: status?.rawValue ?? "")) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let value):
+                    completion(.success(.init(value)))
+                case .failure(let error):
+                    let appError = KDPayError(error: error)
+                    self?.handleError(error: appError)
+                    completion(.failure(appError))
+                }
+            }
+        }
+}
+```
+
+
+### Получение конкретной операции для пользователя
+Получить операцию для пользователя можно через метод `getOperation`. Важно, что id операции должен совпадать с типом операции, иначе операция будет считаться на найденной.
+
+```
+func getOperationInfo(
+    id: Int,
+    type: KDPayOperationElement.OperationType,
+    completion: @escaping (Result<KDPayOperationElement, KDPayError>) -> Void) {
+        Processing.getOperationInfo(id: id, type: type.asProcessingType) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let value):
+                    completion(.success(.init(value)))
+                case .failure(let error):
+                    let appError = KDPayError(error: error)
+                    self?.handleError(error: appError)
+                    completion(.failure(appError))
+                }
+            }
+    }
+}
+```
+
 
 # Методы
 
@@ -232,21 +291,11 @@ fun sendFormCommit(type: String, formId: Int, version: Int?, draftFields: [Int: 
 
 
 ##### Проверка доступа к кошелькам. Имеет кеширование. Возвращает результат предыдущего запроса, параллельно выполняя новый запрос. Если интервал не задан, кеш считается валидным 1 час.
-`getUserExperiment(phone: String, applicationVersion: String, deviceId: String?, loyaltyId: String, cacheInterval: TimeInterval?, completion: @escaping (Result<[ProcessingUserExperiments]>) -> Void)`
-**Параметры**
-
-| Имя      | Тип | Опциональный |Описание|
-| ----------- | ----------- | ----------- |--------|
-| phone| String| нет | Телефон указанный пользователем |
-| applicationVersion| String| нет | Версия приложения |
-| deviceId| String| да | Идентификатор пользователя в системе. Если не указан используется 64-битное число (выраженное в виде шестнадцатеричной строки), уникальное для каждой комбинации ключа подписи приложения, пользователя и устройства. |
-| loyaltyId| String| нет | номер карты лояльности |
-| cacheInterval| TimeInterval| да | Интервал проверки кэша в секундах. Если не выставлен интервал, то кеш на 1 час. |
-
+`getUserExperiment(phone: String, completion: @escaping (Result<ProcessingUserExperiments>) -> Void)`
 **Возвращает**
 | Тип      | Опциональный | Описание |
 | ----------- | ----------- | ----------- |
-| ProcessingUserExperiments      | Нет       | Вернет список экспериментов с доступностью для данного пользователя|
+| UserExperiments      | Нет       | Вернет список экспериментов для данного пользователя |
 
 ##### Проверяет авторизован ли пользователь в системе по таким признакам как наличие в кеше идентификатора сессии и пользователя. А так же наличию публичного ключа сервера.
 `isAuthorized: Boolean`
@@ -258,15 +307,14 @@ fun sendFormCommit(type: String, formId: Int, version: Int?, draftFields: [Int: 
 
 
 ##### Первый шаг авторизации пользователя в системе KD Pay. Служит для запроса смс кода на указанный в параметрах модуль.
-`login(userPhone: String, userName: String? = nil, uid: String?, loyaltyId: String?, completion: ((Result<Int>) -> Void)? = nil)`
+`login(phone: String, userId: Int? = nil, basePhone: String?, deviceId: String?, name: String?, loyaltyId: String?, sessionCompletion: @escaping (String) -> Void, completion: @escaping LoginResponseCompletion)`
 **Параметры**
 
 | Имя      | Тип | Опциональный |Описание|
 | ----------- | ----------- | ----------- |--------|
 | userPhone| String| нет | Телефон указанный пользователем |
 | userName| String| да | Имя пользователя |
-| uid| String| да | Идентификатор пользователя в системе.  Если не указан используется 64-битное число (выраженное в виде шестнадцатеричной строки), уникальное для каждой комбинации ключа подписи приложения, пользователя и устройства.  |
-| loyaltyId| String| да | номер карты лояльности |
+| deviceId| String| да | Идентификатор пользователя в системе.  Если не указан используется 64-битное число (выраженное в виде шестнадцатеричной строки), уникальное для каждой комбинации ключа подписи приложения, пользователя и устройства.  |
 
 **Возвращает**
 | Тип      | Опциональный | Описание |
@@ -300,8 +348,12 @@ fun sendFormCommit(type: String, formId: Int, version: Int?, draftFields: [Int: 
 
 
 ##### Запрос на создание аккаунта в системе KD Pay.
-`createAccount(completion: @escaping (Result<WalletAccountResult>) -> Void)`
+`createAccount(referrerId: String?, completion: @escaping (Result<WalletAccountResult>) -> Void)`
+**Параметры**
 
+| Имя      | Тип | Опциональный |Описание|
+| ----------- | ----------- | ----------- |--------|
+| referrerId| String| да | Идентификатор реферальной системы |
 
 **Возвращает**
 | Тип      | Опциональный | Описание |
@@ -310,12 +362,13 @@ fun sendFormCommit(type: String, formId: Int, version: Int?, draftFields: [Int: 
 
 
 ##### Получение аккаунта пользователя в системе KD Pay.
-`getAccount(cached: Bool, completion: @escaping (Result<WalletAccountResult>) -> Void)`
+`getAccount(cached: Bool, referrerId: String? = nil, completion: @escaping (Result<WalletAccountResult>) -> Void)`
 **Параметры**
 
 | Имя      | Тип | Опциональный |Описание|
 | ----------- | ----------- | ----------- |--------|
 | cached| Boolean| нет | Флаг для определения откуда брать данные аккаунта. true - из кеша, false - из сервера с последующим кешированием.|
+| referrerId| String| да | Идентификатор реферальной системы |
 
 
 **Возвращает**
@@ -372,7 +425,7 @@ fun sendFormCommit(type: String, formId: Int, version: Int?, draftFields: [Int: 
 
 | Имя      | Тип | Опциональный |Описание|
 | ----------- | ----------- | ----------- |--------|
-| amount| Int| нет | Количество запрашиваемых otp кодов. |
+| amount| Int| нет | Количество запрашиваемых otp кодов.  По умолчанию 10.|
 
 **Возвращает**
 | Тип      | Опциональный | Описание |
@@ -395,22 +448,15 @@ fun sendFormCommit(type: String, formId: Int, version: Int?, draftFields: [Int: 
 | ----------- | ----------- | ----------- |--------|
 | amount| Int| нет | Количество запрашиваемых otp кодов. |
 
-##### Запрашивает один свободный OTP код. Код не помечается как использованный и выдан этим методом снова до использования
-`getUnusedOtpCode()`
-**Исключения**
-| Тип      |  Описание |
-| ----------- |  ----------- |
-| ErrorMessage.Client.NoOtpCode() | свободных кодов нет. Перед запросом можно проверить на наличие вызвав `haveOtpCode()` |
-
 ##### Метод получения формы упрощенной идентификации
-`getForm(type: String, formId: Int?, formStatus: ProcessingFormStatus?, completion: @escaping (Result<ProcessingForm>) -> Void)`
+`getForm(type: String?, requestId: String?, version: String?, completion: @escaping (Result<ProcessingForm>) -> Void)`
 **Параметры**
 
 | Имя      | Тип | Опциональный |Описание|
 | ----------- | ----------- | ----------- |--------|
-| type| String| нет | Тип формы, которая задает определенный набор полей. |
+| type| String| да | Тип формы, которая задает определенный набор полей. |
 | formId| Int| да | Идентификатор последнего актуального заполнения. |
-| formStatus| ProcessingFormStatus| да | Статус последнего актуального заполнения. |
+| version| Int| да | Версия последнего актуального заполнения |
 
 **Возвращает**
 | Тип      | Опциональный | Описание |
@@ -451,38 +497,48 @@ fun sendFormCommit(type: String, formId: Int, version: Int?, draftFields: [Int: 
 | ----------- | ----------- | ----------- |
 | ProcessingFormDraft | Нет| Актуальная информация формы и список невалидных полей |
 
-##### Метод проверки версии библиотеки. Имеет кеширование. Возвращает результат предыдущего запроса, параллельно выполняя новый запрос.
+##### Метод проверки версии бибоиотеки. Имеет кеширование. Возвращает результат предыдущего запроса, параллельно выполняя новый запрос.
 `checkLibraryVersion(cacheInterval: TimeInterval, completion: @escaping (Result<ProcessingVersionInfo>) -> Void)`
 **Параметры**
 
 | Имя      | Тип | Опциональный |Описание|
 | ----------- | ----------- | ----------- |--------|
-| cacheInterval| TimeInterval aka Double| нет | Интервал проверки кэша в секундах. Если интервал 0, то кеш не используется. |
+| cacheInterval| TimeInterval aka Double| нет | Интервал проверки кэша в секундах. Если не выставлен интервал, то кеш на 1 час. |
 
 **Возвращает**
 | Тип      | Опциональный | Описание |
 | ----------- | ----------- | ----------- |
-| ProcessingVersionInfo | нет| Возвращает результат проверки.  |
+| ProcessingVersionInfo | нет | Возвращает результат проверки.  |
 
-##### Уведомляет сервер о показанных оповещениях ползьзователю. Возвращает список id оповений с актуальным статусом
-`notifySnacksShown(shownSnacks: Map<Int, Long>): List<SnacksShownStatus>`
+ /**
+     * уведомляет сервер о показанных оповещениях ползьзователю
+     * @param shownSnacks id и timestamp показанного оповещения
+     * @return список id оповений с актуальным статусом
+     */
+
+##### Уведомляет сервер о показанных оповещениях ползьзователю. Возвращает список id оповещений с актуальным статусом
+`snackShown(snacks: [SnackShownRequest], completion: @escaping (Result<SnackShownResponse>) -> Void)`
 **Параметры**
+
 | Имя      | Тип | Опциональный |Описание|
 | ----------- | ----------- | ----------- |--------|
-| shownSnacks| Map<Int, Long> | нет | id и timestamp показанного оповещения |
+| snacks| [SnackShownRequest] | нет | id и timestamp показанного оповещения |
+
 **Возвращает**
 | Тип      | Опциональный | Описание |
 | ----------- | ----------- | ----------- |
-| SnacksShownStatus | нет| Список id оповений с актуальным статусом |
+| SnackShownResponse | нет | Список id оповений с актуальным статусом |
+
 
 #### Получение списка операций для пользователя. Возвращает курсор на предыдущий/следующий набор операций, если такие имеются.
-`getOperations(cursor: String? = null,
-        type: OperationElement.OperationType? = null,
-        partner: String? = null,
-        datetimeStart: String? = null,
-        datetimeFinish: String? = null,
-        status: OperationElement.Status? = null
-    ): Operations`
+`getOperations(
+        cursor: String?,
+        type: OperationElement.OperationType?,
+        partner: String?,
+        datetimeStart: String?,
+        datetimeFinish: String?,
+        status: OperationElement.Status?,
+        completion: @escaping (Result<Operations>) -> Void)`
  **Параметры**
  | Имя      | Тип | Опциональный |Описание|
 | ----------- | ----------- | ----------- |--------|
@@ -498,8 +554,9 @@ fun sendFormCommit(type: String, formId: Int, version: Int?, draftFields: [Int: 
 | ----------- | ----------- | ----------- |
 | Operations | нет| Список операций с предыдущим/следующим указателем |
 
+
 #### Получение операции для пользователя
-`getOperation(id: Int, type: OperationElement.OperationType): OperationElement`
+`getOperationInfo(id: Int, type: OperationElement.OperationType, completion: @escaping (Result<OperationElement>) -> Void)`
  **Параметры**
  | Имя      | Тип | Опциональный |Описание|
 | ----------- | ----------- | ----------- |--------|
@@ -511,8 +568,10 @@ fun sendFormCommit(type: String, formId: Int, version: Int?, draftFields: [Int: 
 | ----------- | ----------- | ----------- |
 | OperationElement | нет| Элемент операции |
 
-##### Полная очистка кеша sdk. Удаляются идентификаторы сессии, пользователя, публичный ключ сервера, otp коды и номер телефона пользователя. Параллельно на сервер отправляется запрос на сброс всех активных сессий.
+
+##### Полная очистка кеша sdk. Удаляются идентификаторы сессии, пользователя, публичный ключ сервера, отп коды и номер телефона пользователя. Параллельно на сервер отправляется запрос на сброс всех активных сессий.
 `logout()`
+
 
 # Структура данных
 
@@ -521,7 +580,9 @@ fun sendFormCommit(type: String, formId: Int, version: Int?, draftFields: [Int: 
 | ----------- | ----------- | ----------- |--------|
 | walletAccountState | ProcessingWalletAccountState | нет | Описывает состояние аккаунта |
 | walletAccount | ProcessingWalletAccount | да | Модель данных кошелька |
-
+| banners | BannerAccount | да  | Список баннеров |
+| messages | MessagesAccount | да  | Информационное сообщение о работе сервера |
+| snacks | Snacks | да  | Список снекбаров |
 
 #### `ProcessingWalletAccountState` enum
 | Имя | Описание |
@@ -551,6 +612,57 @@ fun sendFormCommit(type: String, formId: Int, version: Int?, draftFields: [Int: 
 | blocked | Кошелек заблокирован |
 | closed | Кошелек закрыт |
 
+#### `ProcessingBannersResponse`
+| Имя свойства | Тип | Опциональный |Описание|
+| ----------- | ----------- | ----------- |--------|
+| type | Stirng | нет | Вариант отображения баннеров, например списком, каруселью и т.п. |
+| items | [ProcessingBannerItems] | да | Список баннеров |
+
+#### `ProcessingBannerItems`
+| Имя свойства | Тип | Опциональный |Описание|
+| ----------- | ----------- | ----------- |--------|
+| id | Int | нет | Идентификатор баннера |
+| type | String | нет | Тип баннера |
+| params | [ProcessingBannerParams] | нет | Список параметров баннера |
+
+#### `ProcessingBannerParams`
+| Имя свойства | Тип | Опциональный |Описание|
+| ----------- | ----------- | ----------- |--------|
+| name | String | нет | Имя параметра |
+| value | String | нет | Значение параметра |
+| textColor | String | да | Цвет значения (текста) параметра |
+| type | String | да | Тип параметра |
+| backgroundColor | String | да | Цвет фона параметра |
+
+#### `ProcessingServiceStatus`
+| Имя свойства | Тип | Опциональный |Описание|
+| ----------- | ----------- | ----------- |--------|
+| badStatus | ProcessingServiceStatusElement | да | Сообщение о некорректной работе сервера |
+
+#### `ProcessingServiceStatusElement`
+| Имя свойства | Тип | Опциональный |Описание|
+| ----------- | ----------- | ----------- |--------|
+| title | String | нет | Заголовок сообщения |
+| description | Stirng | нет | Описание сообщения |
+
+#### `ProcessingSnackResponse`
+| Имя свойства | Тип | Опциональный |Описание|
+| ----------- | ----------- | ----------- |--------|
+| type | String | нет | Вариант отображения |
+| items | [ProcessingSnackItems] | нет | Список снеков |
+
+#### `ProcessingSnackItems`
+| Имя свойства | Тип | Опциональный |Описание|
+| ----------- | ----------- | ----------- |--------|
+| id | Int | нет | Идентификатор снека |
+| type | Type | нет | Тип снека |
+| params | [ProcessingParamsResponse] | нет | Параметры снека |
+
+#### `ProcessingParamsResponse`
+| Имя свойства | Тип | Опциональный |Описание|
+| ----------- | ----------- | ----------- |--------|
+| name | String | нет | Имя параметра |
+| value | String | нет | Значение параметра |
 
 #### `ProcessingBank`
 | Имя свойства | Тип | Опциональный |Описание|
@@ -560,7 +672,8 @@ fun sendFormCommit(type: String, formId: Int, version: Int?, draftFields: [Int: 
 | imageLink | String | да | Ссылка на логотип банка  |
 | isLinked | Bool | нет (false по умолчанию) | Состояние привязки банка. Если банк присутствует в списке, но его статус isLinked == false, это означает что банк в процессе привязки.   |
 | isDefault | Bool | нет (false по умолчанию) | Банк выбран основным. С счета этого банка будут сниматься средства при платежах кошельком.  |
-
+| isRetryPossible | Boolean | нет (false по умолчанию) | Возможность отправить запрос на привязку заново. |
+| instructionUrl | String | да | Ссылка на инструкцию по привязке |
 
 #### `ProcessingFormAccount`
 | Имя свойства | Тип | Опциональный |Описание|
@@ -673,6 +786,7 @@ fun sendFormCommit(type: String, formId: Int, version: Int?, draftFields: [Int: 
 | mask | String | да | Маская для поля |
 | minLength | Int | да | Минимальное количество символов |
 | maxLength | Int | да | Максимальное количество символов |
+| nextFieldId | Int | да | Идентификатор следующего поля |
 | hideSymbols | Bool | нет | Скрывать символы. По умолчанию false |
 
 #### `ProcessingEditTextInputType  ` enum
@@ -714,12 +828,13 @@ fun sendFormCommit(type: String, formId: Int, version: Int?, draftFields: [Int: 
 | error | В форме имеются поля, не прошедшие валидацию |
 | ok | Все поля в черновике валидны |
 
+
+
 #### `ProcessingUserExperiments` enum
 | Имя свойства |Описание|
 | ----------- |--------|
-| baseFlow(isAvailable: Bool) | Доступность кошельков |
-| smallQR(isAvailable: Bool) | Доступность QR с малым размером |
-| bonusChange(isAvailable: Bool) | Доступность переводов бонусов |
+| normal | Кошельки доступны |
+| notAvailable(hasQrCodes: Bool) | Кошельки недоступны |
 
 #### sealed `UserInfo` enum
 | Имя свойства |Описание|
