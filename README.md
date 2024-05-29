@@ -2,9 +2,12 @@
 
 IOS SDK for KD_pay
 
-Для интеграции SDK в приложение необходимо использовать сборку данного фреймворка. 
-1.  Cкорпировать папку Processing.xcframework со сброкой SDK в корневую папку приложения
-2.  Добавить Processing в Frameworks, Libraries, and Embedded Content и выбрать Embed Without Signing.
+Для интеграции SDK в приложение необходимо сохранить сборку данного фреймворка. Чтобы получить сборку при первой установке, либо после внесения изменений, необходимо в терминале перейти в папку  SDK и зупстить команду sh build.sh, для того чтобы запустить работу скрипта, запускающего сборку данного фреймворка.
+После чего, в папке build появится папка Processing.xcframework
+
+Для того, чтобы этот файл корректно работал в проекте после внесенных изменений, необходимо сделать следующее:
+1.  Добавить/заменить (показать в Finder) папку Processing.xcframework в корневой папке приложения
+2.  Необходимо добавить Processing в Frameworks, Libraries, and Embedded Content и выбрать Embed Without Signing.
 3.  import Processing
 
 # Сценарии использования SDK KD Pay
@@ -99,9 +102,18 @@ func login(userPhone: String, userBasePhone: String?, userName: String? = nil, u
 func confirmCode(code: String, fcmToken: String, referrerId: String?, completion: ((Result<UserResponse?>) -> Void)?) {
         processingEntry.userConfirm(fcmToken: fcmToken, phoneCode: code, referrerId: referrerId, completion: completion)
     }
-```
 
-    
+```
+<img src="https://github.com/r-proc/sdk-docs-ios/assets/93093046/80b1b2e9-6523-4dd3-921d-abfe51e441ea" width="262" height="568">
+
+
+### Ссылки на связанные документы:
+Согласие на обработку персональных и биометрических данных и пользовательское соглашение -
+https://storage.yandexcloud.net/slyanov-s3/gdpr_consent_v4.html
+
+Публичная оферта - 
+https://storage.yandexcloud.net/slyanov-s3/wallet_public_offer24.html
+
 ### Публичный ключ для генерации QR-кода
 
 SDK получает публичный ключ и сохраняет его в кеше после авторизации пользователя (метод `confirmCode`). Этот публичный ключ хранится в кеше и считается валидным, пока в заголовке любого метода от сервера не вернется `Need-Update-Server-key: true`, после чего SDK  асинхронно дернет ручку обновления публичного ключа и при успешном запросе значение в кеше будет заменено на новый публичный ключ. Это происходит незаметно для пользователя и весь процесс инкапсулирован внути SDK. Пользователь SDK извне никак не может повлиять на этот процесс.
@@ -113,27 +125,77 @@ SDK получает публичный ключ и сохраняет его в
 public class func getAccount(cached: Bool, referrerId: String? = nil, completion: @escaping (Result<UserResponse?>) -> Void) {
     processingEntry.account(cached: cached, referrerId: referrerId, completion: completion)}
 ```   
-    
+
+В UserResponse в поле bankLinkType приходит тип привязки банков : рекуррент/me2me. 
+
+<img src="https://github.com/r-proc/sdk-docs-ios/assets/93093046/412383e9-db78-4de3-841d-d2e282e9881b"  width="262" height="568">
+
+### Onboarding
+В ответе UserResponse приходит  поле required_screens с массивом форм/экранов, которые можно показать перед отображением кошелька, например "need_bank_link"
+
+<img src="https://github.com/r-proc/sdk-docs-ios/assets/93093046/9b37415d-e85a-462f-8274-ceb63fbb2e38"  width="262" height="568">
+
 ### Привязка банка к кошельку
-Для того чтобы привязать к кошельку пользователя банк, необходимо получить список банков с помощью метода `getBanks`. Для того чтобы использовать метод пользователь должен быть авторизован и у пользователя должен быть создан аккаунт. В противном случае метод вызовет ошибку. Далее из списка полученных банков пользователь выбирает необходимый. После чего на сервер отправляется запрос на привязку банка с помощью метода `addNewBank`. Если сервер ответил успехом, то пользователю предлагается перейти в мобильное приложение банка, и завершить процесс привязки банка.
+Для того чтобы привязать к кошельку пользователя банк, необходимо получить список банков с помощью метода `getBanks`. Для того чтобы использовать метод пользователь должен быть авторизован и у пользователя должен быть создан аккаунт. В противном случае метод вызовет ошибку.
 ```
 public class func getBanks(completion: @escaping (Result<[ProcessingBank]>) -> Void) {
         processingEntry.accountBanks(completion: completion)
     }
+```
+В ответе метода `getAccount` есть информация о типе платежного сервиса (bankLinkType): рукуррент/me2me. Метод `getBanks` в SDK учитывает это информацию и возвращает список банков в зависимости от данного типа.
+
+<img src="https://github.com/r-proc/sdk-docs-ios/assets/93093046/7ca7b14c-0706-462f-8d9a-6d745614de0a"  width="262" height="568">
+
+Далее из списка полученных банков пользователь выбирает необходимый. После чего на сервер отправляется запрос на привязку банка с помощью метода `addNewBank`.
+
+```
 public class func addNewBank(bankId: Int, fundingSum: String?, completion: @escaping (Result<AccountBankLinkResponse>) -> Void) {
         processingEntry.accountBankLink(bankId: bankId, fundingSum: fundingSum, completion: completion)
     }
-```    
+```  
+Если сервер ответил успехом, то пользователю предлагается перейти в мобильное приложение банка и завершить процесс привязки банка.
+
+Возвращается AccountBankLinkResponse с id привязки банка, ссылкой с кастомной схемой выбранного банка "bankID://sub.nspk.ru/..."  и временем ожидания подписки expireTimeout.
+
+Данную ссылку необходимо открыть в МП для перехода в мобильное приложение банка, если оно установлено на девайсе.
+
+ <img src="https://github.com/r-proc/sdk-docs-ios/assets/93093046/db8dc338-42d9-4ed3-b475-4dfecb73f546"  width="262" height="568">
+
+
 ### Проверка статуса привязки банка к аккаунту пользователя
-Так как привязка банка осуществляется пользователем в стороннем мобильном приложении, то при вызове метода `addNewBank` не возвращается результат привязки банка. Для того чтобы проверить статус нужно запросить аккаунт пользователя с помощью метода `getAccount`. Ориентируясь на список привязанных банков и id банка, который привязывается к аккаунту можно понять в каком статусе находится привязка банка. Если банк присутствует списке привязанных банков, но поле `isLinked` у банка равно `false` - это значит что банк в процессе привязки к кошельку. В случае если поле равно `true`, значит процесс привязки банка успешен. В случае если в списке банков нет искомого, то это означает что произошла ошибка при привязке банка.
+Так как привязка банка осуществляется пользователем в стороннем мобильном приложении, то при вызове метода `addNewBank` не возвращается результат привязки банка. 
+
+Для того, чтобы проверить статус в течение времени ожидания подписки (expireTimeout), нужно запросить метод `getBankLinkStatus`,  где в ответе возвращается статус и finalStoryId.
 
 ```
 public class func getBankLinkStatus(completion: @escaping (Result<AccountBankLinkStatus>) -> Void) {
         processingEntry.getBankLinkStatus(completion: completion)
     }
 ```
+Статус привязки банка:
+pending - ожидание привязки банка в приложении банка, 
+success - банк привязан успешно
+
+<img src="https://github.com/r-proc/sdk-docs-ios/assets/93093046/f5906d61-72f6-47ec-9fa8-c4c110f6b759"  width="262" height="568"> 
+
+По полученному finalStoryId отображаются экраны со story (Информация об оплате в кошелька с помощью привязанного банка)
+
+<img src="https://github.com/r-proc/sdk-docs-ios/assets/93093046/59ab130b-65f0-42b5-aee9-867b747d38b5"  width="262" height="568"> 
+<img src="https://github.com/r-proc/sdk-docs-ios/assets/93093046/1f324f42-56ac-4c5f-8cd5-d89f2d94ba01"  width="262" height="568">
+<img src="https://github.com/r-proc/sdk-docs-ios/assets/93093046/41167685-8025-4389-b864-77b22084d350"  width="262" height="568"> 
+
+### Получение привязанных банков
+
+При возврате на главный экран кошелька и вызове метода `getAccount` в поле banks возвращаются банки, которые успешно привзязаны, либо которые в процессе привязки.
+
+Ориентируясь на список привязанных банков и id банка, который привязывается к аккаунту можно понять в каком статусе находится привязка банка. Если банк присутствует списке привязанных банков, но поле `isLinked` у банка равно `false` - это значит что банк в процессе привязки к кошельку. В случае если поле равно `true`, значит процесс привязки банка успешен. В случае если в списке банков нет искомого, то это означает что произошла ошибка при привязке банка.
+
+<img src="https://github.com/r-proc/sdk-docs-ios/assets/93093046/2a336778-d9f6-458d-80b0-22ef606e859e"  width="262" height="568"> 
+
+Если в методе `getAccount` возвращается bankLinkType - recurrecnt, то список привязанных банков находится в массиве recurrentBanks, если me2me, то в account в поле banks
 
 ### Установить банк по умолчанию
+
 После привязки банка он становится банком по умолчанию. Для того чтобы изменить банк по умолчанию следует воспользоваться методом `setDefaultBank`. Для того чтобы использовать метод пользователь должен быть авторизован и у пользователя должен быть создан аккаунт, а так же привязан как минимум один банк. Для начала следует получить данные аккаунта методом `getAccount`, предложить пользователю выбрать из списка привязанных банков тот, который он хочет сделать основным. Далее передать `id` этого банка в метод `setDefaultBank(bankId)`. В результате чего в случае успеха метод вернет измененный и актуальный список привязанных банков.
 
 ```
@@ -141,8 +203,10 @@ public class func setDefaultBank(bankId: Int, completion: @escaping (Result<[Pro
         processingEntry.accountBank(id: bankId, completion: completion)
 }
 ```
+<img src="https://github.com/r-proc/sdk-docs-ios/assets/93093046/fa65d106-97bb-47bd-a3f9-73c23897c568"  width="262" height="568"> 
 
 ### Генерация qr кода
+
 Для быстрого создания строки, кодируемой в qr-код, достаточно использовать метод `generateQRString`.
 Для использования метода пользователь должен быть предварительно авторизован и иметь аккаунт в системе.
  
@@ -157,9 +221,11 @@ public class func setNumberOfCodes(number: Int) {
     processingEntry.numberOfCodes = number
 }
 ```
+<img src="https://github.com/r-proc/sdk-docs-ios/assets/93093046/5cec424e-1887-4447-9c54-b818e7cfd394"  width="262" height="568"> 
+
 
 ### Получение формы
-Для платежного сервиса в сценариях необходимы формы для получения информации о пользователе. Формы динамические, то есть содержимое (состав полей) меняется в зависимости от контекста (сценария). Например, для привязывания счета необходимо заполнить форму упрощенной идентификации.
+Для платежного сервиса в сценариях me2me необходимы формы для получения информации о пользователе. Формы динамические, то есть содержимое (состав полей) меняется в зависимости от контекста (сценария). Например, для привязывания счета необходимо заполнить форму упрощенной идентификации.
 Получение формы происходит через метод `getForm(type: String?, requestId: Int?, version: Int?)`. Если запрос формы произойдет без `requestId`, то сервер пришлет чистую форму.
 Если запрос происходит с `requestId`, то SDK отправит 2 запроса на сервер:  `/form` и `/request`. Первый запрос получит форму, второй получит статус валидации для полей. SDK соединит полученные результаты и вернет форму с провалидированными полями.
 
@@ -223,6 +289,9 @@ public class func getOperations(
         completion: completion)
 }
 ```
+
+<img src="https://github.com/r-proc/sdk-docs-ios/assets/93093046/9318f10a-0df7-45e0-86a3-1b0a3586ca06"  width="262" height="568"> 
+
 
 ### Получение конкретной операции для пользователя
 Получить операцию для пользователя можно через метод `getOperationInfo`. Важно, что id операции должен совпадать с типом операции, иначе операция будет считаться на найденной.
@@ -420,7 +489,7 @@ getUserExperiment(phone: String,
 
 ### BANKS
 
-##### Получение информации фондирования.
+##### Получение информации фондирования (для платежного сервиса me2me).
 `func getUserFunding(completion: @escaping (Result<UserFundingResponse>) -> Void)`
 
 **Сompletion**
@@ -460,7 +529,7 @@ getUserExperiment(phone: String,
 | Имя      | Тип | Опциональный |Описание|
 | ----------- | ----------- | ----------- |--------|
 | bankId| Int| нет |Идентификатор банка в системе KD Pay, выбранных из списка банков получаемых с помощью метода getBanks()|
-| fundingSum| String| да |В случае фондирования сумма пополнения|
+| fundingSum| String| да |В случае me2me сумма пополнения|
 
 **Сompletion**
 | Тип      | Опциональный | Описание |
@@ -491,9 +560,7 @@ getUserExperiment(phone: String,
 |(Result\<Void\>) -> Void)| Нет| Сallback с результатом удаления банка. |
 
 
-
 ## QR CODES GENERATION
-
 
 ##### Метод формирует строку, которую впоследствии можно закодировать в qr код для оплаты на кассе. 
 `func generateQRString(loyaltyId: String, completion: @escaping (Result<String>) -> Void)`
@@ -687,26 +754,26 @@ getUserExperiment(phone: String,
 # Структура данных
 ## Version Info
 
-####`ProcessingVersionInfo`
+#### `ProcessingVersionInfo`
 | Имя свойства | Тип | Опциональный |Описание|
 | ----------- | ----------- | ----------- |--------|
 | current | ProcessingVersionInfoCurrent | нет | Информация о текущей версии sdk  |
 | actual | ProcessingVersionInfoActual | да | Информация об актуальной версии sdk, если есть |
 
-####`ProcessingVersionInfoCurrent`
+#### `ProcessingVersionInfoCurrent`
 | Имя свойства | Тип | Опциональный |Описание|
 | ----------- | ----------- | ----------- |--------|
 | status | ProcessingVersionInfoStatus | нет | Статус текущей версии  |
 | description | String | нет | Описание текущей версии |
 
-####`ProcessingVersionInfoActual`
+#### `ProcessingVersionInfoActual`
 | Имя свойства | Тип | Опциональный |Описание|
 | ----------- | ----------- | ----------- |--------|
 | value | String | нет | Актаульная версия  |
 | storeLink | String | да | Ссылка на мп в AppStore |
 | description | String | нет | Описание актуальной версии |
 
-####`ProcessingVersionInfoActual` enum, String
+#### `ProcessingVersionInfoActual` enum, String
 | Имя свойства | Описание|
 | ----------- |--------|
 | actual | Актаульная версия  |
@@ -716,7 +783,7 @@ getUserExperiment(phone: String,
 
 ## Account
 
-####`UserResponse`
+#### `UserResponse`
 | Имя свойства | Тип | Опциональный |Описание|
 | ----------- | ----------- | ----------- |--------|
 | requiredScreens | Array\<String\> | да | Список форм, которые должны отображатся перед страницей кошелька |
@@ -726,16 +793,16 @@ getUserExperiment(phone: String,
 | banners | ProcessingBannersResponse | да | Список баннеров|
 | unreadSnackIds | Array\<Int\> | да |  |
 | recurrentBanks | Array\<ProcessingBank\> | да | Список привязанных к кошельку банков - рекуррентов |
-| bankLinkType | String | да | Состояние привязки банка |
+| bankLinkType | String | да | Тип привязки банков рекуррент/me2me |
 | forms | Array\<ProcessingFormAccount\> | нет | Список форм для упрощенной идентификации  |
 | services | Array\<Services\> | да | Список сервисов  |
 
-####`UserPreviewResponseData`
+#### `UserPreviewResponseData`
 | Имя свойства | Тип | Опциональный |Описание|
 | ----------- | ----------- | ----------- |--------|
 | data | UserPreviewResponse | да | аккаунт пользователя в системе |
 
-####`UserPreviewResponse`
+#### `UserPreviewResponse`
 | Имя свойства | Тип | Опциональный |Описание|
 | ----------- | ----------- | ----------- |--------|
 | banners | ProcessingBannersResponse | да | Список баннеров|
