@@ -82,8 +82,8 @@ public class func checkLibraryVersion(cacheInterval: TimeInterval, completion: @
 public class func getUserPreview(source: String, manzanaUserId: String, loyaltyId: String, completion: @escaping (Result<UserPreviewResponseData>) -> Void)
 ```
 
-### Авторизация пользователя в системе KD Pay
-                                
+<h3 id="kd_pay_authorization">Авторизация пользователя в системе KD Pay</h3>
+
 Авторизация пользователя проходит в два этапа, для этого необходимо запросить у пользователя:
    - userPhone: номер телефона, указанный пользователем (обязательное поле, на этот номер будет создан кошелёк),
    - userBasePhone: дополнительный номер телефона в основном приложении (необязательное),
@@ -114,9 +114,28 @@ https://storage.yandexcloud.net/slyanov-s3/gdpr_consent_v4.html
 Публичная оферта - 
 https://storage.yandexcloud.net/slyanov-s3/wallet_public_offer24.html
 
-### Публичный ключ для генерации QR-кода
+### Взаимодействие со сгенерированными ключами в рамках SDK для генерации QR кода
 
 SDK получает публичный ключ и сохраняет его в кеше после авторизации пользователя (метод `confirmCode`). Этот публичный ключ хранится в кеше и считается валидным, пока в заголовке любого метода от сервера не вернется `Need-Update-Server-key: true`, после чего SDK  асинхронно дернет ручку обновления публичного ключа и при успешном запросе значение в кеше будет заменено на новый публичный ключ. Это происходит незаметно для пользователя и весь процесс инкапсулирован внути SDK. Пользователь SDK извне никак не может повлиять на этот процесс.
+
+#### При вызове метода `confirmCode`
+
+* При вызове методов [configure и login](#kd_pay_authorization) генерируются privateKey и publicKey клиента
+* Сгенерированный publicKey отправляется на сервер в методе `confirmCode`
+* В ответе с сервера приходят serverPublicKey и serverPublicKeyId
+* Клиент расшифровывает serverPublicKey и сохраняет ключ и id в кэш.
+
+#### В случае когда header ответа какого-либо запроса на сервер содержит Need-Update-Server-key=true 
+* Вызов серверного метода `@GET(“server/public_key”)`
+* В ответе с сервера приходят serverPublicKey и serverPublicKeyId
+* Клиент расшифровывает serverPublicKey и сохраняет ключ и id в кэш.
+
+#### При вызове [generateQRString()](#generate_qr_string)::
+* Шифрование otp кода с помощью serverPublicKey
+* Подписание зашифрованного otp кода с помощью publicKey клиента
+
+#### При вызове [logout()](#logout):
+* Очистка всех хранящихся ключей
 
 ### Получение аккаунта пользователя
 
@@ -205,7 +224,7 @@ public class func setDefaultBank(bankId: Int, completion: @escaping (Result<[Pro
 ```
 <img src="https://github.com/r-proc/sdk-docs-ios/assets/93093046/fa65d106-97bb-47bd-a3f9-73c23897c568"  width="262" height="568"> 
 
-### Генерация qr кода
+<h3 id="generate_qr_string">Генерация QR кода</h3>
 
 Для быстрого создания строки, кодируемой в qr-код, достаточно использовать метод `generateQRString`.
 Для использования метода пользователь должен быть предварительно авторизован и иметь аккаунт в системе.
@@ -300,6 +319,17 @@ public class func getOperations(
 public class func getOperationInfo(id: Int, type: OperationElement.OperationType, completion: @escaping (Result<OperationElement>) -> Void) {
   processingEntry.getOperationInfo(id: id, type: type, completion: completion)
 }
+```
+
+### Выход пользователя из KD pay.
+<h3 id="logout">Выход пользователя из KD pay.</h3>
+
+Для выполнения выхода пользователя из системы KD pay необходимо использовать метод `logout()`, при этом выполняется
+полная очистка кеша sdk. Удаляются идентификаторы сессии, пользователя, публичный ключ сервера, отп коды и номер
+телефона пользователя. Параллельно на сервер отправляется запрос на сброс всех активных сессий.
+
+```
+    public class func logout(completion: ((Result<Void>) -> Void)? = nil)
 ```
 
 # Методы
